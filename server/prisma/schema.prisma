@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ArtistRole {
+  PAINTER
+  SINGER
+  POET
+  WRITER
+  DANCER
+  CHRONICLER
+  INSTRUMENTALIST
+  PHOTOGRAPHER
+  OTHER
+}
+enum ArtworkType {
+  IMAGE
+  AUDIO
+  VIDEO
+  TEXT
+}
+enum ArtworkCategory {
+  PAINTING
+  PHOTOGRAPHY
+  MUSIC
+  WRITING
+  DANCE
+  CHRONICLE
+  OTHER
+}
+enum ListingCategory {
+  ORIGINAL_ART
+  DIGITAL_RIGHTS
+  MUSIC_LICENSE
+  SIGNED_BOOK
+  OTHER
+}
+enum PurchaseStatus {
+  PENDING
+  PAID
+  CANCELLED
+  REFUNDED
+}
+enum TradeStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  passwordHash   String
+  displayName    String
+  pseudonym      String       @unique
+  role           ArtistRole   @default(OTHER)
+  avatarUrl      String?
+  bio            String?      @db.Text
+  artStyle       String?
+  backstory      String?      @db.Text
+  instruments    String[]     @default([])
+  contactInfo    String?      @db.Text
+  termsAcceptedAt DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  artworks       Artwork[]
+  listings       Listing[]
+  purchases      Purchase[]   @relation("BuyerPurchases")
+  sales          Purchase[]   @relation("SellerSales")
+  following      Follow[]     @relation("Following")
+  followers      Follow[]     @relation("Followers")
+  likes          Like[]
+  comments       Comment[]
+  offeredTrades  Trade[]      @relation("TradeOfferer")
+  receivedTrades Trade[]      @relation("TradeRecipient")
+}
+
+model Artwork {
+  id          String          @id @default(cuid())
+  creatorId   String
+  title       String
+  description String?         @db.Text
+  type        ArtworkType
+  category    ArtworkCategory
+  mediaUrl    String
+  thumbnailUrl String?
+  durationSec Int?
+  isPublished Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  creator     User            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  listing     Listing?
+  likes       Like[]
+  comments    Comment[]
+  offeredIn   Trade[]         @relation("OfferedArtwork")
+  requestedIn Trade[]         @relation("RequestedArtwork")
+  @@index([creatorId, createdAt])
+  @@index([category, createdAt])
+}
+
+model Listing {
+  id          String          @id @default(cuid())
+  artworkId   String          @unique
+  sellerId    String
+  category    ListingCategory
+  priceCents  Int?
+  currency    String          @default("USD")
+  isActive    Boolean         @default(true)
+  isTradeable Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  artwork     Artwork         @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  seller      User            @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  purchases   Purchase[]
+  @@index([category, isActive, createdAt])
+}
+
+model Purchase {
+  id             String         @id @default(cuid())
+  listingId      String
+  buyerId        String
+  sellerId       String
+  amountCents    Int
+  currency       String         @default("USD")
+  status         PurchaseStatus @default(PENDING)
+  paymentRef     String?        @unique
+  createdAt      DateTime       @default(now())
+  listing        Listing        @relation(fields: [listingId], references: [id])
+  buyer          User           @relation("BuyerPurchases", fields: [buyerId], references: [id])
+  seller         User           @relation("SellerSales", fields: [sellerId], references: [id])
+  @@index([buyerId, createdAt])
+}
+
+model Follow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+  @@id([followerId, followingId])
+  @@index([followingId])
+}
+
+model Like {
+  userId    String
+  artworkId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  @@id([userId, artworkId])
+  @@index([artworkId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  artworkId String
+  body      String   @db.VarChar(2000)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  @@index([artworkId, createdAt])
+}
+
+model Trade {
+  id                   String      @id @default(cuid())
+  offererId            String
+  recipientId          String
+  offeredArtworkId     String
+  requestedArtworkId   String
+  message              String?     @db.Text
+  status               TradeStatus @default(PENDING)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  offerer              User        @relation("TradeOfferer", fields: [offererId], references: [id])
+  recipient            User        @relation("TradeRecipient", fields: [recipientId], references: [id])
+  offeredArtwork       Artwork     @relation("OfferedArtwork", fields: [offeredArtworkId], references: [id])
+  requestedArtwork     Artwork     @relation("RequestedArtwork", fields: [requestedArtworkId], references: [id])
+  @@index([recipientId, status, createdAt])
+}
